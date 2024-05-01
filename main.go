@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	// "unsafe"
 )
 
 const (
@@ -12,28 +11,22 @@ const (
 	MAX_LOOP       = 100000000
 )
 
-type noCache struct {
+
+// No false sharing
+type ValNoShare struct {
+	x int
+	_ [CACHELINE_SIZE]byte // Prevent false sharing
+	y int
+}
+
+// With false sharing
+type ValShare struct {
 	x int
 	y int
 }
 
-type withCache struct {
-	x   int
-	arr []int
-	y   int
-}
-
-func main() {
+func run(x *int, y *int) {
 	var wg sync.WaitGroup
-	noC := noCache{0, 0}  // No cacheline
-
-	// ========================================================================================
-	// Uncomment to enable exploiting cacheline
-	// var foo int
-	// withC := withCache{0, make([]int, (CACHELINE_SIZE/unsafe.Sizeof(foo))-unsafe.Sizeof(foo)), 0}  // With Cacheline
-	// =========================================================================================
-
-
 	now := time.Now()
 
 	wg.Add(1)
@@ -42,7 +35,7 @@ func main() {
 		for i := 0; i < MAX_LOOP; i++ {
 			*c += i
 		}
-	}(&noC.x)
+	}(x)
 
 	wg.Add(1)
 	go func(c *int) {
@@ -50,9 +43,22 @@ func main() {
 		for i := 0; i < MAX_LOOP; i++ {
 			*c += i
 		}
-	}(&noC.y)
+	}(y)
 
 	wg.Wait()
 
 	fmt.Printf("It took: %v\n", time.Now().Sub(now))
+}
+
+func main() {
+	valShare := ValShare{}
+	fmt.Println("Sharing cacheline")
+	run(&valShare.x, &valShare.y)
+
+	fmt.Println()
+
+	noshare := ValNoShare{}
+	fmt.Println("No sharing cacheline")
+	run(&noshare.x, &noshare.y)
+
 }
